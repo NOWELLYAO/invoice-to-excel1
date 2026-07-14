@@ -385,21 +385,29 @@ export default function InvoiceToExcel() {
       >
         <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
         <p className="text-sm text-gray-600">
-          Glissez vos captures ici, ou <span style={{ color: BLUE }}>cliquez pour parcourir</span>
+          Glissez plusieurs captures ici, ou <span style={{ color: BLUE }}>cliquez pour en choisir plusieurs</span>
         </p>
-        <p className="text-xs text-gray-400 mt-1">PNG, JPG — plusieurs fichiers acceptés</p>
+        <p className="text-xs text-gray-400 mt-1">
+          PNG, JPG — sélectionnez plusieurs fichiers avec Ctrl (ou Cmd sur Mac) + clic
+        </p>
         <input
           ref={inputRef}
           type="file"
           accept="image/*"
           multiple
           className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
         />
       </div>
 
       {entries.length > 0 && (
         <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500">
+            {entries.length} capture{entries.length > 1 ? "s" : ""} ajoutée{entries.length > 1 ? "s" : ""}
+          </span>
           <button
             onClick={processAll}
             disabled={!hasPending || isProcessing}
