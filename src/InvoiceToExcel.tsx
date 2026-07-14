@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import {
   Upload,
   FileSpreadsheet,
@@ -108,6 +108,66 @@ N'invente aucune donnée. Si un champ n'est pas lisible, mets une chaîne vide o
   };
 }
 
+const thinBorder = (rgb: string) => {
+  const side = { style: "thin", color: { rgb } };
+  return { top: side, bottom: side, left: side, right: side };
+};
+
+const STYLE = {
+  title: {
+    font: { name: "Arial", sz: 14, bold: true, color: { rgb: "1D4ED8" } },
+    alignment: { vertical: "center" },
+  },
+  ref: {
+    font: { name: "Arial", sz: 9, color: { rgb: "6B7280" } },
+    alignment: { vertical: "center" },
+  },
+  header: {
+    font: { name: "Arial", sz: 9, bold: true, color: { rgb: "1E3A5F" } },
+    fill: { fgColor: { rgb: "BFDBFE" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: thinBorder("93C5FD"),
+  },
+  cell: {
+    font: { name: "Arial", sz: 9 },
+    alignment: { vertical: "center" },
+    border: thinBorder("E5EAF0"),
+  },
+  cellCenter: {
+    font: { name: "Arial", sz: 9 },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: thinBorder("E5EAF0"),
+  },
+  pu: {
+    font: { name: "Arial", sz: 9, color: { rgb: "374151" } },
+    fill: { fgColor: { rgb: "F8FAFC" } },
+    alignment: { horizontal: "right", vertical: "center" },
+    border: thinBorder("E5EAF0"),
+    numFmt: "#,##0.00",
+  },
+  total: {
+    font: { name: "Arial", sz: 9 },
+    fill: { fgColor: { rgb: "F0FDF4" } },
+    alignment: { horizontal: "right", vertical: "center" },
+    border: thinBorder("E5EAF0"),
+    numFmt: "#,##0.00",
+  },
+  totalLabel: {
+    font: { name: "Arial", sz: 10, bold: true, color: { rgb: "1E3A5F" } },
+    fill: { fgColor: { rgb: "DBEAFE" } },
+    alignment: { vertical: "center" },
+  },
+  totalValue: {
+    font: { name: "Arial", sz: 10, bold: true, color: { rgb: "1E3A5F" } },
+    fill: { fgColor: { rgb: "DBEAFE" } },
+    alignment: { horizontal: "right", vertical: "center" },
+    numFmt: "#,##0.00",
+  },
+  footer: {
+    font: { name: "Arial", sz: 9, color: { rgb: "6B7280" } },
+  },
+};
+
 function buildWorkbook(entry: InvoiceEntry): XLSX.WorkBook {
   const headerRow = 4;
   const firstItemRow = 5;
@@ -115,31 +175,56 @@ function buildWorkbook(entry: InvoiceEntry): XLSX.WorkBook {
   const totalRow = lastItemRow + 2;
   const footerRow = totalRow + 2;
 
-  const rows: any[][] = [];
-  rows[0] = [`FACTURE N° ${entry.invoiceNumber}`];
-  rows[1] = [
+  const ws: XLSX.WorkSheet = {};
+  const put = (row: number, col: number, v: string | number | null, s: any, f?: string) => {
+    const ref = XLSX.utils.encode_cell({ r: row - 1, c: col - 1 });
+    const cell: any = { s };
+    if (f) {
+      cell.t = "n";
+      cell.f = f;
+    } else if (typeof v === "number") {
+      cell.t = "n";
+      cell.v = v;
+    } else {
+      cell.t = "s";
+      cell.v = v ?? "";
+    }
+    ws[ref] = cell;
+  };
+
+  put(1, 1, `FACTURE N° ${entry.invoiceNumber}`, STYLE.title);
+  put(
+    2,
+    1,
     `Réf : ${entry.invoiceNumber}   |   Date : ${entry.billingDate}   |   Payeur : ${entry.payerName}`,
-  ];
-  rows[2] = [];
-  rows[headerRow - 1] = ["P/N", "Désignation", "P.U. (€)", "Qté", "Total (€)", "Statut"];
+    STYLE.ref
+  );
+
+  const headers = ["P/N", "Désignation", "P.U. (€)", "Qté", "Total (€)", "Statut"];
+  headers.forEach((h, i) => put(headerRow, i + 1, h, STYLE.header));
 
   entry.items.forEach((item, i) => {
-    const r = firstItemRow + i - 1;
+    const r = firstItemRow + i;
     const pu = item.qty ? Math.round((item.total / item.qty) * 100) / 100 : 0;
-    rows[r] = [item.pn, item.desig, pu, item.qty, null, "Facturé"];
+    put(r, 1, item.pn, STYLE.cell);
+    put(r, 2, item.desig, STYLE.cell);
+    put(r, 3, pu, STYLE.pu);
+    put(r, 4, item.qty, STYLE.cellCenter);
+    put(r, 5, null, STYLE.total, `C${r}*D${r}`);
+    put(r, 6, "Facturé", STYLE.cell);
   });
 
-  rows[totalRow - 1] = ["TOTAL HT", null, null, null, null];
-  rows[footerRow - 1] = [`Payeur : ${entry.payerName}${entry.payerAddress ? ", " + entry.payerAddress : ""}`];
+  put(totalRow, 1, "TOTAL HT", STYLE.totalLabel);
+  for (let c = 2; c <= 4; c++) put(totalRow, c, "", STYLE.totalLabel);
+  put(totalRow, 5, null, STYLE.totalValue, `SUM(E${firstItemRow}:E${lastItemRow})`);
 
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-
-  // Formulas
-  for (let i = 0; i < entry.items.length; i++) {
-    const r = firstItemRow + i;
-    ws[`E${r}`] = { t: "n", f: `C${r}*D${r}` };
-  }
-  ws[`E${totalRow}`] = { t: "n", f: `SUM(E${firstItemRow}:E${lastItemRow})` };
+  put(
+    footerRow,
+    1,
+    `Payeur : ${entry.payerName}${entry.payerAddress ? ", " + entry.payerAddress : ""}`,
+    STYLE.footer
+  );
+  for (let c = 2; c <= 4; c++) put(footerRow, c, "", STYLE.footer);
 
   ws["!merges"] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
@@ -148,18 +233,21 @@ function buildWorkbook(entry: InvoiceEntry): XLSX.WorkBook {
     { s: { r: footerRow - 1, c: 0 }, e: { r: footerRow - 1, c: 3 } },
   ];
 
-  ws["!cols"] = [
-    { wch: 11 },
-    { wch: 38 },
-    { wch: 11 },
-    { wch: 5 },
-    { wch: 11 },
-    { wch: 17 },
-  ];
+  ws["!cols"] = [{ wch: 11 }, { wch: 38 }, { wch: 11 }, { wch: 5 }, { wch: 11 }, { wch: 17 }];
+  ws["!rows"] = [{ hpt: 26 }, { hpt: 16 }];
+  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: footerRow - 1, c: 5 } });
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Facture");
   return wb;
+}
+
+function invoiceTotal(entry: InvoiceEntry): number {
+  return entry.items.reduce((sum, it) => sum + (Number(it.total) || 0), 0);
+}
+
+function formatEUR(value: number): string {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value || 0);
 }
 
 function downloadWorkbook(entry: InvoiceEntry) {
@@ -356,7 +444,9 @@ export default function InvoiceToExcel() {
                   {entry.status === "pending" && "En attente d'analyse"}
                   {entry.status === "processing" && "Analyse en cours…"}
                   {entry.status === "done" &&
-                    `Facture N° ${entry.invoiceNumber || "—"} · ${entry.items.length} article(s)`}
+                    `Facture N° ${entry.invoiceNumber || "—"} · ${entry.items.length} article(s) · Total ${formatEUR(
+                      invoiceTotal(entry)
+                    )}`}
                   {entry.status === "error" && (entry.error || "Erreur")}
                 </p>
               </div>
@@ -398,6 +488,18 @@ export default function InvoiceToExcel() {
                       style={{ borderColor: "#E2E8F0" }}
                     />
                   </label>
+                </div>
+
+                <div
+                  className="flex items-center justify-between px-3 py-2 rounded"
+                  style={{ backgroundColor: "#DBEAFE" }}
+                >
+                  <span className="text-xs font-medium" style={{ color: NAVY }}>
+                    Total facture
+                  </span>
+                  <span className="text-sm font-semibold" style={{ color: NAVY }}>
+                    {formatEUR(invoiceTotal(entry))}
+                  </span>
                 </div>
 
                 <table className="w-full text-xs">
