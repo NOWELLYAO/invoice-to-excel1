@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Plus,
   Minus,
+  FileText,
 } from "lucide-react";
 
 interface Item {
@@ -52,20 +53,27 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 async function extractInvoiceData(base64: string, mimeType: string) {
-  const prompt = `Tu regardes une capture d'écran SAP d'une facture de vente (F2 Sales Invoice - Overview of Billing Items).
-Extrait uniquement les données réellement visibles à l'écran et réponds STRICTEMENT en JSON, sans texte autour, sans balises markdown, selon ce schéma exact :
+  const prompt = `Tu regardes un document de facturation. Il peut s'agir soit :
+(a) d'une capture d'écran SAP (F2 Sales Invoice - Overview of Billing Items), soit
+(b) d'une facture commerciale multi-pages (Commercial Invoice, PDF, souvent Grundfos).
+
+Identifie automatiquement le type de document et extrais les données réellement présentes.
+Si c'est un PDF avec plusieurs pages, parcours TOUTES les pages et regroupe tous les articles
+dans une seule liste, sans doublons, sans recopier les lignes de total de page intermédiaire.
+
+Réponds STRICTEMENT en JSON, sans texte autour, sans balises markdown, selon ce schéma exact :
 
 {
-  "invoice_number": "string, ex 7293020306",
+  "invoice_number": "string, numéro de facture (F2 Sales Invoice ou Commercial Invoice)",
   "billing_date": "string au format JJ/MM/AAAA",
-  "payer_name": "string, nom du payeur",
-  "payer_address": "string, adresse du payeur si visible sinon vide",
+  "payer_name": "string, nom du client/payeur (champ 'Payer' en SAP, ou société cliente / adresse de livraison sur une Commercial Invoice)",
+  "payer_address": "string, adresse du client si visible sinon vide",
   "items": [
     {
-      "material_code": "string, colonne Material",
-      "description": "string, colonne Item Description",
-      "quantity": nombre (colonne Invoiced Quantity),
-      "net_value": nombre (colonne Net Value de la ligne, sans séparateur de milliers, point décimal)
+      "material_code": "string, référence produit (colonne 'Material', ou code article sur 'Material / description')",
+      "description": "string, désignation du produit uniquement — ignore les lignes secondaires type 'ECCN code' ou 'Country of origin'",
+      "quantity": nombre (colonne Invoiced Quantity ou Quantity),
+      "net_value": nombre (colonne Net Value pour SAP, ou NET Amount pour une Commercial Invoice — montant net de la ligne, sans séparateur de milliers, point décimal)
     }
   ]
 }
@@ -266,12 +274,14 @@ export default function InvoiceToExcel() {
     if (!files || files.length === 0) return;
     const newEntries: InvoiceEntry[] = [];
     for (const file of Array.from(files)) {
-      if (!file.type.startsWith("image/")) continue;
+      const isImage = file.type.startsWith("image/");
+      const isPdf = file.type === "application/pdf";
+      if (!isImage && !isPdf) continue;
       const base64 = await fileToBase64(file);
       newEntries.push({
         id: uid(),
         fileName: file.name,
-        imagePreview: URL.createObjectURL(file),
+        imagePreview: isImage ? URL.createObjectURL(file) : "",
         mimeType: file.type,
         base64,
         status: "pending",
@@ -368,7 +378,7 @@ export default function InvoiceToExcel() {
             Captures SAP vers Excel
           </h1>
           <p className="text-sm text-gray-500">
-            Déposez vos captures de factures SAP (F2), l'extraction se fait automatiquement.
+            Déposez vos captures SAP ou vos factures PDF, l'extraction se fait automatiquement.
           </p>
         </div>
       </div>
@@ -385,15 +395,16 @@ export default function InvoiceToExcel() {
       >
         <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
         <p className="text-sm text-gray-600">
-          Glissez plusieurs captures ici, ou <span style={{ color: BLUE }}>cliquez pour en choisir plusieurs</span>
+          Glissez plusieurs captures ou PDF de factures ici, ou{" "}
+          <span style={{ color: BLUE }}>cliquez pour en choisir plusieurs</span>
         </p>
         <p className="text-xs text-gray-400 mt-1">
-          PNG, JPG — sélectionnez plusieurs fichiers avec Ctrl (ou Cmd sur Mac) + clic
+          PNG, JPG, PDF — sélectionnez plusieurs fichiers avec Ctrl (ou Cmd sur Mac) + clic
         </p>
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -438,12 +449,21 @@ export default function InvoiceToExcel() {
         {entries.map((entry) => (
           <div key={entry.id} className="border rounded-lg overflow-hidden" style={{ borderColor: "#E2E8F0" }}>
             <div className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: "#F8FAFC" }}>
-              <img
-                src={entry.imagePreview}
-                alt={entry.fileName}
-                className="w-12 h-12 object-cover rounded border"
-                style={{ borderColor: "#E2E8F0" }}
-              />
+              {entry.imagePreview ? (
+                <img
+                  src={entry.imagePreview}
+                  alt={entry.fileName}
+                  className="w-12 h-12 object-cover rounded border"
+                  style={{ borderColor: "#E2E8F0" }}
+                />
+              ) : (
+                <div
+                  className="w-12 h-12 flex items-center justify-center rounded border flex-shrink-0"
+                  style={{ borderColor: "#E2E8F0", backgroundColor: "#F1F5F9" }}
+                >
+                  <FileText className="w-5 h-5 text-gray-400" />
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate" style={{ color: NAVY }}>
                   {entry.fileName}
@@ -592,7 +612,7 @@ export default function InvoiceToExcel() {
 
       {entries.length === 0 && (
         <p className="text-xs text-gray-400 text-center">
-          Aucune capture pour le moment. Ajoutez une ou plusieurs images de factures SAP ci-dessus.
+          Aucune capture pour le moment. Ajoutez une ou plusieurs images ou PDF de factures ci-dessus.
         </p>
       )}
     </div>
