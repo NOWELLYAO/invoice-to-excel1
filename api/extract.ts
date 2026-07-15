@@ -27,6 +27,11 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response(JSON.stringify({ error: "Paramètres manquants" }), { status: 400 });
   }
 
+  const isPdf = mimeType === "application/pdf";
+  const fileBlock = isPdf
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }
+    : { type: "image", source: { type: "base64", media_type: mimeType, data: base64 } };
+
   const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -36,14 +41,11 @@ export default async function handler(req: Request): Promise<Response> {
     },
     body: JSON.stringify({
       model: "claude-sonnet-5",
-      max_tokens: 1500,
+      max_tokens: 6000,
       messages: [
         {
           role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mimeType, data: base64 } },
-            { type: "text", text: prompt },
-          ],
+          content: [fileBlock, { type: "text", text: prompt }],
         },
       ],
     }),
