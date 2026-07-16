@@ -90,7 +90,11 @@ N'invente aucune donnée. Si un champ n'est pas lisible, mets une chaîne vide o
 
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({}));
-    throw new Error(errBody.error || `Erreur API (${response.status})`);
+    const message =
+      typeof errBody.error === "string"
+        ? errBody.error
+        : errBody.error?.message || errBody.message || `Erreur API (${response.status})`;
+    throw new Error(message);
   }
   const data = await response.json();
   const textBlock = (data.content || []).find((b: any) => b.type === "text");
