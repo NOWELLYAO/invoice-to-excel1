@@ -43,13 +43,26 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(",")[1]);
-    reader.onerror = () => reject(new Error("Lecture du fichier impossible"));
-    reader.readAsDataURL(file);
-  });
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  let bytes = new Uint8Array(buffer);
+
+  // Certains PDF générés par des outils tiers (ex: devis Grundfos) commencent par "%%PDF-"
+  // au lieu du standard "%PDF-" attendu par les lecteurs stricts. On corrige cet octet en trop
+  // pour éviter une erreur "The PDF specified was not valid" côté API.
+  if (file.type === "application/pdf") {
+    const header = new TextDecoder().decode(bytes.slice(0, 8));
+    if (header.startsWith("%%PDF-")) {
+      bytes = bytes.slice(1);
+    }
+  }
+
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
 }
 
 async function extractInvoiceData(base64: string, mimeType: string) {
