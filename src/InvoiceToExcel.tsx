@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import * as XLSX from "xlsx-js-style";
+import DatasheetCompare from "./DatasheetCompare";
 import {
   Upload,
   FileSpreadsheet,
@@ -11,6 +12,7 @@ import {
   Plus,
   Minus,
   FileText,
+  GitCompare,
 } from "lucide-react";
 
 interface Item {
@@ -283,6 +285,7 @@ function downloadWorkbook(entry: InvoiceEntry) {
 }
 
 export default function InvoiceToExcel() {
+  const [activeTab, setActiveTab] = useState<"invoices" | "compare">("invoices");
   const [entries, setEntries] = useState<InvoiceEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -382,54 +385,85 @@ export default function InvoiceToExcel() {
   const hasDone = entries.some((e) => e.status === "done");
 
   return (
-    <div className="w-full max-w-3xl mx-auto p-6 space-y-6 bg-white" style={{ fontFamily: "Arial, sans-serif" }}>
-      <div className="flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: NAVY }}
+    <div className="w-full max-w-5xl mx-auto p-6 space-y-6 bg-white" style={{ fontFamily: "Arial, sans-serif" }}>
+      <div className="flex gap-1 border-b" style={{ borderColor: "#E2E8F0" }}>
+        <button
+          onClick={() => setActiveTab("invoices")}
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px"
+          style={
+            activeTab === "invoices"
+              ? { borderColor: BLUE, color: NAVY }
+              : { borderColor: "transparent", color: "#94A3B8" }
+          }
         >
-          <FileSpreadsheet className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-lg font-semibold" style={{ color: NAVY }}>
-            Captures SAP vers Excel
-          </h1>
-          <p className="text-sm text-gray-500">
-            Déposez vos captures SAP ou vos factures PDF, l'extraction se fait automatiquement.
-          </p>
-        </div>
+          <FileSpreadsheet className="w-4 h-4" />
+          Factures → Excel
+        </button>
+        <button
+          onClick={() => setActiveTab("compare")}
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px"
+          style={
+            activeTab === "compare"
+              ? { borderColor: BLUE, color: NAVY }
+              : { borderColor: "transparent", color: "#94A3B8" }
+          }
+        >
+          <GitCompare className="w-4 h-4" />
+          Comparateur de fiches techniques
+        </button>
       </div>
 
-      <div
-        className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors"
-        style={{ borderColor: "#CBD5E1" }}
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          addFiles(e.dataTransfer.files);
-        }}
-      >
-        <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-        <p className="text-sm text-gray-600">
-          Glissez plusieurs captures ou PDF de factures ici, ou{" "}
-          <span style={{ color: BLUE }}>cliquez pour en choisir plusieurs</span>
-        </p>
-        <p className="text-xs text-gray-400 mt-1">
-          PNG, JPG, PDF — sélectionnez plusieurs fichiers avec Ctrl (ou Cmd sur Mac) + clic
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*,application/pdf"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            addFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-      </div>
+      {activeTab === "compare" && <DatasheetCompare />}
+
+      {activeTab === "invoices" && (
+        <>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: NAVY }}
+            >
+              <FileSpreadsheet className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold" style={{ color: NAVY }}>
+                Captures SAP vers Excel
+              </h1>
+              <p className="text-sm text-gray-500">
+                Déposez vos captures SAP ou vos factures PDF, l'extraction se fait automatiquement.
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors"
+            style={{ borderColor: "#CBD5E1" }}
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              addFiles(e.dataTransfer.files);
+            }}
+          >
+            <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+            <p className="text-sm text-gray-600">
+              Glissez plusieurs captures ou PDF de factures ici, ou{" "}
+              <span style={{ color: BLUE }}>cliquez pour en choisir plusieurs</span>
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              PNG, JPG, PDF — sélectionnez plusieurs fichiers avec Ctrl (ou Cmd sur Mac) + clic
+            </p>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+          </div>
 
       {entries.length > 0 && (
         <div className="flex items-center gap-3">
@@ -627,10 +661,12 @@ export default function InvoiceToExcel() {
         ))}
       </div>
 
-      {entries.length === 0 && (
+      {activeTab === "invoices" && entries.length === 0 && (
         <p className="text-xs text-gray-400 text-center">
           Aucune capture pour le moment. Ajoutez une ou plusieurs images ou PDF de factures ci-dessus.
         </p>
+      )}
+        </>
       )}
     </div>
   );
