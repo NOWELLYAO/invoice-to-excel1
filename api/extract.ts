@@ -17,15 +17,25 @@ export default async function handler(req: any, res: any) {
   }
 
   const { base64, mimeType, prompt } = req.body || {};
-  if (!base64 || !mimeType || !prompt) {
+  if (!prompt) {
     res.status(400).json({ error: "Paramètres manquants" });
     return;
   }
+  if ((base64 && !mimeType) || (!base64 && mimeType)) {
+    res.status(400).json({ error: "Paramètres incohérents" });
+    return;
+  }
 
-  const isPdf = mimeType === "application/pdf";
-  const fileBlock = isPdf
-    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }
-    : { type: "image", source: { type: "base64", media_type: mimeType, data: base64 } };
+  const content: any[] = [];
+  if (base64 && mimeType) {
+    const isPdf = mimeType === "application/pdf";
+    content.push(
+      isPdf
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }
+        : { type: "image", source: { type: "base64", media_type: mimeType, data: base64 } }
+    );
+  }
+  content.push({ type: "text", text: prompt });
 
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -41,7 +51,7 @@ export default async function handler(req: any, res: any) {
         messages: [
           {
             role: "user",
-            content: [fileBlock, { type: "text", text: prompt }],
+            content,
           },
         ],
       }),
